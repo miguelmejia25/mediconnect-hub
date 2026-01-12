@@ -17,7 +17,7 @@ const Index = () => {
     <MainLayout>
       <Header 
         title="Dashboard" 
-        subtitle="Bienvenido de vuelta, Dr. Martínez" 
+        subtitle="Bienvenido de vuelta, Dra. Cassanello" 
       />
 
       {/* Stats Grid */}

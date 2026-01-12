@@ -5,6 +5,7 @@ import VitalCard from '@/components/dashboard/VitalCard';
 import { Button } from '@/components/ui/button';
 import { mockPatients } from '@/data/mockData';
 import { getOxygenStatus, getTemperatureStatus, getHeartRateStatus } from '@/types/medical';
+import { useVitalsFirebase } from '@/hooks/usefire';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -12,7 +13,10 @@ import { es } from 'date-fns/locale';
 const PatientDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { latestVitals, loading } = useVitalsFirebase();
+  
   const patient = mockPatients.find(p => p.id === id);
+  const isRealtimePatient = id === '3';
 
   if (!patient) {
     return (
@@ -26,6 +30,16 @@ const PatientDetail = () => {
       </MainLayout>
     );
   }
+
+  // Usar datos de Firebase para el paciente ESP32
+  const vitals = isRealtimePatient && latestVitals 
+    ? {
+        oxygen: latestVitals.oxygen,
+        temperature: latestVitals.temp,
+        heartRate: latestVitals.heart,
+        timestamp: new Date(latestVitals.timestamp)
+      }
+    : patient.vitals;
 
   const statusConfig = {
     stable: { label: 'Estable', className: 'status-normal' },
@@ -49,16 +63,31 @@ const PatientDetail = () => {
       {/* Patient Header */}
       <div className="vital-card mb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          <img
-            src={patient.avatar}
-            alt={patient.name}
-            className="w-24 h-24 rounded-2xl object-cover ring-4 ring-border"
-          />
+          <div className="relative">
+            <img
+              src={patient.avatar}
+              alt={patient.name}
+              className="w-24 h-24 rounded-2xl object-cover ring-4 ring-border"
+            />
+            {isRealtimePatient && (
+              <div className={cn(
+                "absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center",
+                loading ? "bg-yellow-500" : latestVitals ? "bg-green-500" : "bg-gray-400"
+              )}>
+                <span className="w-3 h-3 bg-white rounded-full animate-pulse" />
+              </div>
+            )}
+          </div>
           
           <div className="flex-1">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
-              <h1 className="font-display text-2xl font-bold text-foreground">
+              <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
                 {patient.name}
+                {isRealtimePatient && (
+                  <span className="text-sm bg-green-500/20 text-green-600 px-2 py-1 rounded-full">
+                    En Vivo
+                  </span>
+                )}
               </h1>
               <span className={cn(
                 "px-3 py-1 rounded-full text-sm font-medium w-fit",
@@ -78,12 +107,16 @@ const PatientDetail = () => {
 
             <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
               <Clock className="w-4 h-4" />
-              <span>Última actualización: {format(patient.lastUpdate, "dd MMM yyyy, HH:mm", { locale: es })}</span>
+              <span>Última actualización: {format(vitals.timestamp, "dd MMM yyyy, HH:mm:ss", { locale: es })}</span>
             </div>
           </div>
 
           <div className="flex gap-2 self-start">
-            <Button variant="outline" className="gap-2">
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => navigate(`/patients/${id}/history`)}
+            >
               <FileText className="w-4 h-4" />
               Historia
             </Button>
@@ -113,25 +146,25 @@ const PatientDetail = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <VitalCard
             title="Saturación de Oxígeno"
-            value={patient.vitals.oxygen}
+            value={vitals.oxygen}
             unit="SpO2 %"
-            status={getOxygenStatus(patient.vitals.oxygen)}
+            status={getOxygenStatus(vitals.oxygen)}
             icon={Wind}
             color="text-vital-oxygen"
           />
           <VitalCard
             title="Temperatura Corporal"
-            value={patient.vitals.temperature}
+            value={vitals.temperature}
             unit="°C"
-            status={getTemperatureStatus(patient.vitals.temperature)}
+            status={getTemperatureStatus(vitals.temperature)}
             icon={Thermometer}
             color="text-vital-temperature"
           />
           <VitalCard
             title="Ritmo Cardíaco"
-            value={patient.vitals.heartRate}
+            value={vitals.heartRate}
             unit="bpm"
-            status={getHeartRateStatus(patient.vitals.heartRate)}
+            status={getHeartRateStatus(vitals.heartRate)}
             icon={Heart}
             color="text-vital-heartrate"
           />

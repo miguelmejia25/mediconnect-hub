@@ -1,17 +1,47 @@
-import { Wind, Thermometer, Heart, AlertCircle, TrendingUp } from 'lucide-react';
+import { Wind, Thermometer, Heart, AlertCircle, TrendingUp, Wifi } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Header from '@/components/layout/Header';
 import { mockPatients } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 import { getOxygenStatus, getTemperatureStatus, getHeartRateStatus } from '@/types/medical';
+import { useVitalsFirebase } from '@/hooks/usefire';
 
 const Monitoring = () => {
-  const criticalPatients = mockPatients.filter(p => p.status === 'critical');
+  const { latestVitals, loading } = useVitalsFirebase();
+  
+  // Crear lista de pacientes con datos en tiempo real para el paciente ESP32
+  const patientsWithRealtime = mockPatients.map(patient => {
+    if (patient.id === '3' && latestVitals) {
+      return {
+        ...patient,
+        status: getOverallStatus(latestVitals.oxygen, latestVitals.temp, latestVitals.heart),
+        vitals: {
+          oxygen: latestVitals.oxygen,
+          temperature: latestVitals.temp,
+          heartRate: latestVitals.heart,
+          timestamp: new Date(latestVitals.timestamp)
+        }
+      };
+    }
+    return patient;
+  });
+
+  const criticalPatients = patientsWithRealtime.filter(p => p.status === 'critical');
   
   // Calculate averages
-  const avgOxygen = Math.round(mockPatients.reduce((sum, p) => sum + p.vitals.oxygen, 0) / mockPatients.length * 10) / 10;
-  const avgTemp = Math.round(mockPatients.reduce((sum, p) => sum + p.vitals.temperature, 0) / mockPatients.length * 10) / 10;
-  const avgHeart = Math.round(mockPatients.reduce((sum, p) => sum + p.vitals.heartRate, 0) / mockPatients.length);
+  const avgOxygen = Math.round(patientsWithRealtime.reduce((sum, p) => sum + p.vitals.oxygen, 0) / patientsWithRealtime.length * 10) / 10;
+  const avgTemp = Math.round(patientsWithRealtime.reduce((sum, p) => sum + p.vitals.temperature, 0) / patientsWithRealtime.length * 10) / 10;
+  const avgHeart = Math.round(patientsWithRealtime.reduce((sum, p) => sum + p.vitals.heartRate, 0) / patientsWithRealtime.length);
+
+  function getOverallStatus(oxygen: number, temp: number, heart: number): 'stable' | 'observation' | 'critical' {
+    const o2Status = getOxygenStatus(oxygen);
+    const tempStatus = getTemperatureStatus(temp);
+    const hrStatus = getHeartRateStatus(heart);
+    
+    if (o2Status === 'critical' || tempStatus === 'critical' || hrStatus === 'critical') return 'critical';
+    if (o2Status === 'warning' || tempStatus === 'warning' || hrStatus === 'warning') return 'observation';
+    return 'stable';
+  }
 
   return (
     <MainLayout>
@@ -144,10 +174,11 @@ const Monitoring = () => {
               </tr>
             </thead>
             <tbody>
-              {mockPatients.map((patient) => {
+              {patientsWithRealtime.map((patient) => {
                 const oxygenStatus = getOxygenStatus(patient.vitals.oxygen);
                 const tempStatus = getTemperatureStatus(patient.vitals.temperature);
                 const heartStatus = getHeartRateStatus(patient.vitals.heartRate);
+                const isRealtimePatient = patient.id === '3';
 
                 const statusStyles = {
                   normal: 'text-success',
@@ -162,16 +193,36 @@ const Monitoring = () => {
                 };
 
                 return (
-                  <tr key={patient.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                  <tr key={patient.id} className={cn(
+                    "border-b border-border/50 hover:bg-secondary/30 transition-colors",
+                    isRealtimePatient && "bg-primary/5"
+                  )}>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={patient.avatar}
-                          alt={patient.name}
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
+                        <div className="relative">
+                          <img
+                            src={patient.avatar}
+                            alt={patient.name}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                          {isRealtimePatient && (
+                            <div className={cn(
+                              "absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center",
+                              loading ? "bg-yellow-500" : latestVitals ? "bg-green-500" : "bg-gray-400"
+                            )}>
+                              <Wifi className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                        </div>
                         <div>
-                          <p className="font-medium text-foreground">{patient.name}</p>
+                          <p className="font-medium text-foreground flex items-center gap-2">
+                            {patient.name}
+                            {isRealtimePatient && (
+                              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                                En Vivo
+                              </span>
+                            )}
+                          </p>
                           <p className="text-sm text-muted-foreground">{patient.age} años</p>
                         </div>
                       </div>
